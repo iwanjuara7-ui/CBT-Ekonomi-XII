@@ -1,0 +1,6 @@
+{
+  "name": "CBT Ujian Online Ekonomi XII",
+  "description": "Aplikasi ujian berbasis komputer (CBT) mata pelajaran Ekonomi Kelas XII materi Akuntansi dan Persamaan Dasar Akuntansi dilengkapi portal siswa dan panel guru.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
