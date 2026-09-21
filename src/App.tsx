@@ -125,6 +125,26 @@ export default function App() {
   const draftCount = questions.length - activeQuestions.length;
 
   const handleStudentSubmit = (data: Participant) => {
+    // Check if participant already has a completed submission
+    const alreadySubmitted = submissions.find(
+      (s) =>
+        s.name.trim().toLowerCase() === data.name.trim().toLowerCase() &&
+        s.studentClass.trim().toLowerCase() === data.studentClass.trim().toLowerCase()
+    );
+
+    if (alreadySubmitted) {
+      setParticipant({
+        name: alreadySubmitted.name,
+        studentClass: alreadySubmitted.studentClass,
+        token: alreadySubmitted.token,
+      });
+      setLatestSubmission(alreadySubmitted);
+      setFinishReason('manual');
+      setScreen('result');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     const randomToken = generateRandomToken();
     setParticipant({
       ...data,
@@ -135,6 +155,20 @@ export default function App() {
   };
 
   const handleStartExam = (confirmedToken: string) => {
+    // Final check before entering exam
+    const alreadySubmitted = submissions.find(
+      (s) =>
+        s.name.trim().toLowerCase() === participant.name.trim().toLowerCase() &&
+        s.studentClass.trim().toLowerCase() === participant.studentClass.trim().toLowerCase()
+    );
+
+    if (alreadySubmitted) {
+      setLatestSubmission(alreadySubmitted);
+      setScreen('result');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setParticipant((prev) => ({
       ...prev,
       token: confirmedToken,
@@ -217,15 +251,22 @@ export default function App() {
     });
   };
 
-  const handleRestart = () => {
+  const handleGoHome = () => {
     setParticipant({ name: '', studentClass: '' });
     setLatestSubmission(null);
     setScreen('identity');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleGoHome = () => {
-    setScreen('identity');
+  const handleViewSubmittedResult = (record: SubmissionRecord) => {
+    setParticipant({
+      name: record.name,
+      studentClass: record.studentClass,
+      token: record.token,
+    });
+    setLatestSubmission(record);
+    setFinishReason('manual');
+    setScreen('result');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -278,7 +319,9 @@ export default function App() {
     <div className="min-h-screen font-sans text-slate-800 bg-[#f4f7fa]">
       {screen === 'identity' && (
         <StudentLogin
+          submissions={submissions}
           onStudentSubmit={handleStudentSubmit}
+          onViewSubmittedResult={handleViewSubmittedResult}
           onOpenAdmin={() => {
             setScreen('admin');
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -318,7 +361,6 @@ export default function App() {
           durationMinutes={examSettings.durationMinutes}
           kkm={examSettings.kkm}
           reason={finishReason}
-          onRestart={handleRestart}
           onGoHome={handleGoHome}
         />
       )}

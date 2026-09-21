@@ -232,6 +232,7 @@ export const RulesScreen: React.FC<RulesScreenProps> = ({
         <ul className="space-y-2.5 text-sm text-slate-600 list-decimal pl-5 leading-relaxed">
           <li>Kerjakan soal secara mandiri, teliti, dan menjunjung tinggi integritas kejujuran akademik.</li>
           <li>Baca setiap petunjuk soal dan pilihan jawaban (A, B, C, D, E) dengan cermat sebelum menentukan pilihan.</li>
+          <li><strong>Batas Kesempatan Ujian 1 Kali:</strong> Setiap peserta hanya berhak mengikuti sesi ujian sebanyak 1 (satu) kali. Setelah dikumpulkan, ujian bersifat final dan tidak dapat diulang.</li>
           <li>Gunakan tombol <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Ragu-ragu</span> untuk menandai nomor soal yang perlu ditinjau ulang sebelum mengakhiri ujian.</li>
           <li>Waktu pengerjaan berdurasi <strong>{durationMinutes}:00 menit</strong> dan akan terus berjalan secara otomatis. Jika waktu habis, jawaban tersimpan otomatis dikumpulkan.</li>
           <li>Soal pilihan ganda aktif ({activeCount} butir) dinilai otomatis setelah ujian dikumpulkan dan menghasilkan laporan nilai instan.</li>

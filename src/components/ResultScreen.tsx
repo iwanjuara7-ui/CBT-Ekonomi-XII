@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Participant, Question, SubmissionRecord } from '../types';
 import { FormattedContent } from './FormattedContent';
-import { CheckCircle2, XCircle, Award, RotateCcw, Home, Printer, ChevronDown, ChevronUp, AlertCircle, FileText, Check, X } from 'lucide-react';
+import { CheckCircle2, XCircle, Award, Home, Printer, ChevronDown, ChevronUp, AlertCircle, FileText, Check, X, ShieldCheck } from 'lucide-react';
 
 interface ResultScreenProps {
   participant: Participant;
@@ -11,7 +11,6 @@ interface ResultScreenProps {
   reason: 'manual' | 'time' | 'violation';
   kkm?: number;
   durationMinutes?: number;
-  onRestart: () => void;
   onGoHome: () => void;
 }
 
@@ -23,7 +22,6 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   reason,
   kkm = 75,
   durationMinutes = 30,
-  onRestart,
   onGoHome,
 }) => {
   const [showReview, setShowReview] = useState(false);
@@ -279,27 +277,30 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button
-            id="restart-button"
-            type="button"
-            onClick={onRestart}
-            className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>Mulai Ulang Sesi</span>
-          </button>
+      {/* Single Attempt Finality Notice */}
+      <div className="mt-5 p-3.5 rounded-2xl bg-slate-100 border border-slate-200 text-slate-700 text-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>
+            <strong>Sesi Ujian Selesai & Final:</strong> Sesuai ketentuan, ujian hanya dapat dilakukan 1 kali. Lembar jawaban Anda telah tersimpan permanen dalam basis data pengawas.
+          </span>
+        </div>
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 shrink-0">
+          1x Pengerjaan
+        </span>
+      </div>
 
+      {/* Action Buttons */}
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             id="result-home-button"
             type="button"
             onClick={onGoHome}
-            className="px-5 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-[#12355b] hover:bg-[#0b2745] text-white font-bold text-sm shadow-sm transition-all flex items-center gap-2 cursor-pointer"
           >
             <Home className="w-4 h-4" />
-            <span>Halaman Depan</span>
+            <span>Selesai & Keluar ke Beranda</span>
           </button>
         </div>
 

@@ -886,9 +886,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => onDeleteSubmission(s.id)}
+                                onClick={() => {
+                                  if (window.confirm(`Hapus rekaman nilai ${s.name}? Siswa ini akan diizinkan login dan mengerjakan ujian kembali.`)) {
+                                    onDeleteSubmission(s.id);
+                                  }
+                                }}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                title="Hapus rekaman ini"
+                                title="Hapus rekaman ini (mereset status agar siswa dapat mengikuti ujian kembali jika diizinkan)"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1915,11 +1919,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               })}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Hapus rekaman nilai ${selectedSubmission.name}? Tindakan ini akan mengizinkan siswa login dan mengikuti ujian kembali.`)) {
+                    onDeleteSubmission(selectedSubmission.id);
+                    setSelectedSubmission(null);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Reset Sesi Siswa (Izinkan Ujian Ulang)</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedSubmission(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
               >
                 Tutup
               </button>
