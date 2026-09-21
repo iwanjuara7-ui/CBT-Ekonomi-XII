@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Participant } from '../types';
 import { EXAM_CONFIG } from '../data/questions';
-import { BookOpen, GraduationCap, ShieldCheck, User, Users, Sparkles } from 'lucide-react';
+import { 
+  BookOpen, GraduationCap, ShieldCheck, User, Users, Sparkles, 
+  Lock, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2 
+} from 'lucide-react';
+import { verifyTeacherLogin, getTeacherCredentials, DEFAULT_TEACHER_CREDENTIALS } from '../utils/authService';
 
 interface StudentLoginProps {
   onStudentSubmit: (participant: Participant) => void;
@@ -16,6 +20,13 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({
   const [name, setName] = useState('');
   const [studentClass, setStudentClass] = useState('');
   const [error, setError] = useState('');
+
+  // Admin / Teacher Login Form State
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [adminError, setAdminError] = useState('');
+  const [adminSuccess, setAdminSuccess] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +43,41 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({
       name: trimmedName,
       studentClass: trimmedClass,
     });
+  };
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminError('');
+
+    const u = adminUsername.trim();
+    const p = adminPassword;
+
+    if (!u) {
+      setAdminError('Silakan masukkan username guru / pengawas.');
+      return;
+    }
+
+    if (!p) {
+      setAdminError('Silakan masukkan password akun guru.');
+      return;
+    }
+
+    const isValid = verifyTeacherLogin(u, p);
+    if (isValid) {
+      setAdminSuccess(true);
+      setTimeout(() => {
+        onOpenAdmin();
+      }, 350);
+    } else {
+      setAdminError('Username atau password salah! Akses ke Dashboard Guru dilindungi.');
+    }
+  };
+
+  const handleFillDefaultAdmin = () => {
+    const creds = getTeacherCredentials();
+    setAdminUsername(creds.username);
+    setAdminPassword(creds.password);
+    setAdminError('');
   };
 
   return (
@@ -217,26 +263,114 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({
 
           {/* Admin / Teacher Pane */}
           {activeTab === 'admin' && (
-            <div id="admin-login" className="space-y-4">
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Buka dashboard guru untuk memantau rekap hasil ujian peserta didik serta meninjau seluruh bank soal (30 nomor lengkap dengan kunci & pembahasan).
-              </p>
-
-              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-900 text-xs leading-relaxed">
-                <span className="font-bold block mb-1">Akses Pengawas & Guru:</span>
-                Dashboard ini menyediakan ringkasan nilai, status penyelesaian, ekspor lembar rekap nilai, serta tinjauan analisis butir soal dari naskah dokumen asli.
+            <form id="admin-login-form" onSubmit={handleAdminLogin} className="space-y-4" noValidate>
+              <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs leading-relaxed flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Akses Khusus Pengawas & Guru:</span>
+                  <span>Dashboard dilindungi kata sandi untuk menjaga kerahasiaan 30 naskah soal, kunci jawaban, dan data rekapitulasi nilai siswa.</span>
+                </div>
               </div>
 
+              {/* Username Guru */}
+              <div>
+                <label htmlFor="admin-username" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Username Guru
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-username"
+                    type="text"
+                    required
+                    placeholder="Masukkan username guru (cth: endang8)"
+                    value={adminUsername}
+                    onChange={(e) => {
+                      setAdminUsername(e.target.value);
+                      if (adminError) setAdminError('');
+                    }}
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#12355b] focus:ring-2 focus:ring-blue-100 transition-all outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Password Guru */}
+              <div>
+                <label htmlFor="admin-password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Password Guru
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="admin-password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Masukkan password akun guru"
+                    value={adminPassword}
+                    onChange={(e) => {
+                      setAdminPassword(e.target.value);
+                      if (adminError) setAdminError('');
+                    }}
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#12355b] focus:ring-2 focus:ring-blue-100 transition-all outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                    title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Notification */}
+              {adminError && (
+                <div id="admin-login-error" className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-medium flex items-center gap-2" role="alert">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{adminError}</span>
+                </div>
+              )}
+
+              {/* Success Notification */}
+              {adminSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>Kredensial valid! Membuka Dashboard Guru...</span>
+                </div>
+              )}
+
+              {/* Submit Button */}
               <button
                 id="admin-login-button"
-                type="button"
-                onClick={onOpenAdmin}
-                className="w-full py-3 px-4 rounded-xl bg-[#12355b] hover:bg-[#0b2745] text-white font-bold text-sm shadow-md shadow-[#12355b]/20 transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                type="submit"
+                disabled={adminSuccess}
+                className="w-full mt-2 py-3 px-4 rounded-xl bg-[#12355b] hover:bg-[#0b2745] disabled:bg-slate-400 text-white font-bold text-sm shadow-md shadow-[#12355b]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Users className="w-4 h-4" />
-                <span>Buka Dashboard Guru / Admin</span>
+                <KeyRound className="w-4 h-4" />
+                <span>Masuk ke Dashboard Guru</span>
               </button>
-            </div>
+
+              {/* Default Credentials Helper Card */}
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
+                <div className="flex items-center gap-1.5 text-slate-600">
+                  <span className="font-semibold">Akun Bawaan:</span>
+                  <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono font-bold">endang8</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFillDefaultAdmin}
+                  className="text-xs text-blue-700 hover:text-blue-900 font-semibold hover:underline flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                  title="Isi otomatis username dan password bawaan"
+                >
+                  <span>Gunakan Akun Bawaan</span>
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </section>

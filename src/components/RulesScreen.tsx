@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Participant } from '../types';
+import { Participant, AntiCheatSettings } from '../types';
 import { EXAM_CONFIG, generateRandomToken } from '../data/questions';
-import { ArrowLeft, Check, CheckSquare, Clock, Copy, FileText, KeyRound, RefreshCw, ShieldAlert, Sparkles, UserCheck } from 'lucide-react';
+import { ArrowLeft, Check, CheckSquare, Clock, Copy, FileText, KeyRound, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, UserCheck, AlertTriangle } from 'lucide-react';
 
 interface RulesScreenProps {
   participant: Participant;
@@ -9,6 +9,7 @@ interface RulesScreenProps {
   totalCount: number;
   durationMinutes?: number;
   kkm?: number;
+  antiCheat?: AntiCheatSettings;
   onBack: () => void;
   onStartExam: (token: string) => void;
 }
@@ -19,6 +20,7 @@ export const RulesScreen: React.FC<RulesScreenProps> = ({
   totalCount,
   durationMinutes = EXAM_CONFIG.durationMinutes,
   kkm = 75,
+  antiCheat,
   onBack,
   onStartExam,
 }) => {
@@ -233,6 +235,20 @@ export const RulesScreen: React.FC<RulesScreenProps> = ({
           <li>Gunakan tombol <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Ragu-ragu</span> untuk menandai nomor soal yang perlu ditinjau ulang sebelum mengakhiri ujian.</li>
           <li>Waktu pengerjaan berdurasi <strong>{durationMinutes}:00 menit</strong> dan akan terus berjalan secara otomatis. Jika waktu habis, jawaban tersimpan otomatis dikumpulkan.</li>
           <li>Soal pilihan ganda aktif ({activeCount} butir) dinilai otomatis setelah ujian dikumpulkan dan menghasilkan laporan nilai instan.</li>
+          {antiCheat?.enabled && (
+            <li className="text-rose-900 font-semibold bg-rose-50/80 p-2.5 rounded-xl border border-rose-200 list-none -ml-5 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="block text-rose-800 font-bold">Proctoring Anti-Curang Aktif:</span>
+                <span>
+                  Sistem otomatis mendeteksi perpindahan tab browser, aplikasi luar, copy-paste, dan penekanan tombol devtools. 
+                  {antiCheat.maxViolations > 0 
+                    ? ` Batas maksimal pelanggaran adalah ${antiCheat.maxViolations} kali sebelum ujian dikunci/dikumpulkan otomatis.`
+                    : ' Seluruh riwayat pelanggaran direkam secara permanen dalam laporan guru.'}
+                </span>
+              </div>
+            </li>
+          )}
         </ul>
 
         {/* Agreement Checkbox */}

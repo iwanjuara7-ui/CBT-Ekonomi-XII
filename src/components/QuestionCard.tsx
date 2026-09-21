@@ -1,5 +1,6 @@
 import React from 'react';
 import { Question } from '../types';
+import { FormattedContent } from './FormattedContent';
 import { ArrowLeft, ArrowRight, Flag, Send, Type } from 'lucide-react';
 
 interface QuestionCardProps {
@@ -121,9 +122,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
         {/* Question Prompt */}
         <div className="py-6">
-          <h2 className={`font-semibold text-slate-900 ${fontClass}`}>
-            {question.text}
-          </h2>
+          <div className={`font-semibold text-slate-900 ${fontClass}`}>
+            <FormattedContent content={question.text} image={question.image} />
+          </div>
         </div>
 
         {/* Options List */}
@@ -147,15 +148,15 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                   value={key}
                   checked={isSelected}
                   onChange={() => onSelectOption(key)}
-                  className="mt-1 w-4 h-4 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                  className="mt-1 w-4 h-4 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer shrink-0"
                 />
-                <div className="flex gap-2">
-                  <span className={`font-bold ${isSelected ? 'text-emerald-800' : 'text-slate-600'}`}>
+                <div className="flex gap-2 flex-1">
+                  <span className={`font-bold shrink-0 ${isSelected ? 'text-emerald-800' : 'text-slate-600'}`}>
                     {key}.
                   </span>
-                  <span className={`font-medium leading-relaxed ${optionFontClass}`}>
-                    {option}
-                  </span>
+                  <div className={`font-medium leading-relaxed flex-1 ${optionFontClass}`}>
+                    <FormattedContent content={option} />
+                  </div>
                 </div>
               </label>
             );

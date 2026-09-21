@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppScreen, Participant, Question, SubmissionRecord, ExamSettings } from './types';
+import { AppScreen, Participant, Question, SubmissionRecord, ExamSettings, AntiCheatSettings, CheatViolation } from './types';
 import { INITIAL_QUESTIONS, generateRandomToken } from './data/questions';
 import { StudentLogin } from './components/StudentLogin';
 import { RulesScreen } from './components/RulesScreen';
@@ -12,9 +12,23 @@ const STORAGE_SUBMISSIONS_KEY = 'cbt_ekonomi_xii_submissions';
 const STORAGE_QUESTIONS_KEY = 'cbt_ekonomi_xii_questions_v3';
 const STORAGE_SETTINGS_KEY = 'cbt_ekonomi_xii_exam_settings_v1';
 
+export const DEFAULT_ANTI_CHEAT: AntiCheatSettings = {
+  enabled: true,
+  blockTabSwitch: true,
+  enforceFullscreen: false,
+  disableCopyPaste: true,
+  disableRightClick: true,
+  disableDevTools: true,
+  maxViolations: 3,
+  actionOnMaxViolations: 'auto_submit',
+  randomizeQuestions: false,
+  randomizeOptions: false,
+};
+
 const DEFAULT_SETTINGS: ExamSettings = {
   kkm: 75,
   durationMinutes: 30,
+  antiCheat: DEFAULT_ANTI_CHEAT,
 };
 
 export default function App() {
@@ -25,7 +39,7 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_QUESTIONS_KEY);
       if (saved) {
         const parsed: Question[] = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === INITIAL_QUESTIONS.length) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
@@ -58,9 +72,9 @@ export default function App() {
   });
 
   const [latestSubmission, setLatestSubmission] = useState<SubmissionRecord | null>(null);
-  const [finishReason, setFinishReason] = useState<'manual' | 'time'>('manual');
+  const [finishReason, setFinishReason] = useState<'manual' | 'time' | 'violation'>('manual');
 
-  // Dynamic Exam Settings (KKM and Time Duration)
+  // Dynamic Exam Settings (KKM, Time Duration, and Anti-Cheat)
   const [examSettings, setExamSettings] = useState<ExamSettings>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_SETTINGS_KEY);
@@ -70,6 +84,7 @@ export default function App() {
           return {
             kkm: Math.max(10, Math.min(100, Math.round(parsed.kkm))),
             durationMinutes: Math.max(5, Math.min(240, Math.round(parsed.durationMinutes))),
+            antiCheat: { ...DEFAULT_ANTI_CHEAT, ...(parsed.antiCheat || {}) },
           };
         }
       }
@@ -131,7 +146,8 @@ export default function App() {
   const handleFinishExam = (
     answers: Record<number, string>,
     timeSpentSeconds: number,
-    reason: 'manual' | 'time'
+    reason: 'manual' | 'time' | 'violation',
+    violations?: CheatViolation[]
   ) => {
     const totalActive = activeQuestions.length;
     let correct = 0;
@@ -168,6 +184,8 @@ export default function App() {
       }),
       answers,
       timeSpentSeconds,
+      violations: violations || [],
+      violationCount: violations?.length || 0,
     };
 
     setSubmissions((prev) => [newRecord, ...prev]);
@@ -221,6 +239,31 @@ export default function App() {
     setQuestions((prev) => prev.map((q) => ({ ...q, active: true })));
   };
 
+  const handleImportQuestions = (imported: Question[], mode: 'append' | 'replace') => {
+    if (!Array.isArray(imported) || imported.length === 0) return;
+    if (mode === 'replace') {
+      const reindexed = imported.map((q, idx) => ({ ...q, id: idx + 1 }));
+      setQuestions(reindexed);
+    } else {
+      setQuestions((prev) => {
+        const startId = prev.length + 1;
+        const reindexedNew = imported.map((q, idx) => ({ ...q, id: startId + idx }));
+        return [...prev, ...reindexedNew];
+      });
+    }
+  };
+
+  const handleResetQuestions = () => {
+    setQuestions(INITIAL_QUESTIONS);
+  };
+
+  const handleDeleteQuestion = (id: number) => {
+    setQuestions((prev) => {
+      const remaining = prev.filter((q) => q.id !== id);
+      return remaining.map((q, idx) => ({ ...q, id: idx + 1 }));
+    });
+  };
+
   const handleClearSubmissions = () => {
     if (window.confirm('Hapus seluruh riwayat rekap nilai siswa pada sesi ini?')) {
       setSubmissions([]);
@@ -250,6 +293,7 @@ export default function App() {
           totalCount={questions.length}
           durationMinutes={examSettings.durationMinutes}
           kkm={examSettings.kkm}
+          antiCheat={examSettings.antiCheat}
           onBack={() => setScreen('identity')}
           onStartExam={handleStartExam}
         />
@@ -260,6 +304,7 @@ export default function App() {
           participant={participant}
           questions={activeQuestions}
           durationMinutes={examSettings.durationMinutes}
+          antiCheat={examSettings.antiCheat}
           onFinishExam={handleFinishExam}
         />
       )}
@@ -287,6 +332,9 @@ export default function App() {
           onSubmissionsImported={handleSubmissionsImported}
           onToggleQuestionActive={handleToggleQuestionActive}
           onActivateAllQuestions={handleActivateAllQuestions}
+          onImportQuestions={handleImportQuestions}
+          onResetQuestions={handleResetQuestions}
+          onDeleteQuestion={handleDeleteQuestion}
           onClearSubmissions={handleClearSubmissions}
           onDeleteSubmission={handleDeleteSubmission}
           onLogout={() => {

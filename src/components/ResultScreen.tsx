@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Participant, Question, SubmissionRecord } from '../types';
+import { FormattedContent } from './FormattedContent';
 import { CheckCircle2, XCircle, Award, RotateCcw, Home, Printer, ChevronDown, ChevronUp, AlertCircle, FileText, Check, X } from 'lucide-react';
 
 interface ResultScreenProps {
@@ -7,7 +8,7 @@ interface ResultScreenProps {
   submission: SubmissionRecord;
   activeQuestions: Question[];
   totalDraftCount: number;
-  reason: 'manual' | 'time';
+  reason: 'manual' | 'time' | 'violation';
   kkm?: number;
   durationMinutes?: number;
   onRestart: () => void;
@@ -52,7 +53,9 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
               )}
             </p>
             <p id="submission-message" className="mt-1 text-xs sm:text-sm text-blue-200">
-              {reason === 'time'
+              {reason === 'violation'
+                ? 'Ujian dikumpulkan otomatis oleh sistem karena mencapai batas toleransi pelanggaran tata tertib.'
+                : reason === 'time'
                 ? `Waktu ujian telah berakhir (${durationMinutes}:00). Lembar jawaban yang telah terisi dinilai otomatis oleh sistem.`
                 : 'Ujian telah dikumpulkan dengan sukses. Penilaian otomatis telah dihitung secara instan.'}
             </p>
@@ -134,6 +137,37 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         </article>
       </div>
 
+      {/* Violations Notice Card (If any recorded) */}
+      {submission.violations && submission.violations.length > 0 && (
+        <div className="mt-5 p-5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-rose-800 text-sm">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              <span>Catatan Integritas Ujian: {submission.violations.length} Pelanggaran Terdeteksi</span>
+            </div>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
+              Audit CBT
+            </span>
+          </div>
+          <p className="text-xs text-rose-900 leading-relaxed">
+            Sistem pengawas otomatis mencatat aktivitas di luar lembar ujian yang terdeteksi selama pengerjaan berlangsung:
+          </p>
+          <div className="space-y-1.5 pt-1">
+            {submission.violations.map((v, i) => (
+              <div key={i} className="p-2.5 rounded-xl bg-white border border-rose-200/80 flex items-start justify-between gap-3 text-xs">
+                <div>
+                  <strong className="text-rose-900 block font-semibold">{v.type}</strong>
+                  <span className="text-slate-600">{v.description}</span>
+                </div>
+                <span className="font-mono text-[11px] text-slate-400 shrink-0 bg-slate-100 px-2 py-0.5 rounded">
+                  {v.timestamp}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Note Notice */}
       <div className="mt-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/70 text-amber-900 text-xs sm:text-sm flex items-start gap-3 leading-relaxed">
         <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -202,9 +236,9 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-sm font-semibold text-slate-800 mt-2 mb-3">
-                    {q.text}
-                  </p>
+                  <div className="text-sm font-semibold text-slate-800 mt-2 mb-3">
+                    <FormattedContent content={q.text} image={q.image} />
+                  </div>
 
                   <div className="space-y-1.5 text-xs text-slate-700 mb-3 pl-2">
                     {q.options.map((opt, optIdx) => {
@@ -223,10 +257,12 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
 
                       return (
                         <div key={key} className={rowClass}>
-                          <span className="font-bold">{key}.</span>
-                          <span>{opt}</span>
-                          {isKeyCorrect && <span className="text-emerald-700 ml-auto text-[11px] font-bold">✓ Kunci</span>}
-                          {isKeyStudent && !isKeyCorrect && <span className="text-rose-600 ml-auto text-[11px] font-bold">Pilihan Anda</span>}
+                          <span className="font-bold shrink-0">{key}.</span>
+                          <div className="flex-1">
+                            <FormattedContent content={opt} />
+                          </div>
+                          {isKeyCorrect && <span className="text-emerald-700 ml-auto text-[11px] font-bold shrink-0">✓ Kunci</span>}
+                          {isKeyStudent && !isKeyCorrect && <span className="text-rose-600 ml-auto text-[11px] font-bold shrink-0">Pilihan Anda</span>}
                         </div>
                       );
                     })}
@@ -234,7 +270,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
 
                   <div className="p-3 bg-blue-50/60 rounded-lg text-xs text-blue-900 border border-blue-100">
                     <span className="font-bold block mb-1 text-[#12355b]">Pembahasan:</span>
-                    {q.discussion}
+                    <FormattedContent content={q.discussion} />
                   </div>
                 </article>
               );

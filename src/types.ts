@@ -9,6 +9,7 @@ export interface Question {
   answer: string;
   discussion: string;
   active: boolean;
+  image?: string;
 }
 
 export interface Participant {
@@ -17,9 +18,29 @@ export interface Participant {
   token?: string;
 }
 
+export interface CheatViolation {
+  timestamp: string;
+  type: string;
+  description: string;
+}
+
+export interface AntiCheatSettings {
+  enabled: boolean;
+  blockTabSwitch: boolean;
+  enforceFullscreen: boolean;
+  disableCopyPaste: boolean;
+  disableRightClick: boolean;
+  disableDevTools: boolean;
+  maxViolations: number; // 0 = tanpa batas toleransi (hanya catat)
+  actionOnMaxViolations: 'auto_submit' | 'warn_only';
+  randomizeQuestions: boolean;
+  randomizeOptions: boolean;
+}
+
 export interface ExamSettings {
   kkm: number;
   durationMinutes: number;
+  antiCheat?: AntiCheatSettings;
 }
 
 export interface SchoolKopConfig {
@@ -49,6 +70,8 @@ export interface SubmissionRecord {
   submittedAt: string;
   answers: Record<number, string>;
   timeSpentSeconds?: number;
+  violations?: CheatViolation[];
+  violationCount?: number;
 }
 
 export type AppScreen = 'identity' | 'rules' | 'exam' | 'result' | 'admin';

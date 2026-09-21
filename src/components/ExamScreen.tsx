@@ -1,26 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Participant, Question } from '../types';
+import { Participant, Question, AntiCheatSettings, CheatViolation } from '../types';
 import { EXAM_CONFIG } from '../data/questions';
 import { QuestionCard } from './QuestionCard';
 import { QuestionNav } from './QuestionNav';
 import { ConfirmModal } from './ConfirmModal';
 import { CountdownTimer } from './CountdownTimer';
-import { LayoutGrid, X, Clock, Loader2, CheckCircle } from 'lucide-react';
+import { AntiCheatWarningModal } from './AntiCheatWarningModal';
+import { prepareStudentQuestions, getViolationTimestamp } from '../utils/antiCheatHelper';
+import { 
+  LayoutGrid, X, Clock, Loader2, ShieldCheck, ShieldAlert, 
+  Maximize2, Minimize2, AlertCircle 
+} from 'lucide-react';
 
 interface ExamScreenProps {
   participant: Participant;
   questions: Question[];
   durationMinutes?: number;
-  onFinishExam: (answers: Record<number, string>, timeSpentSeconds: number, reason: 'manual' | 'time') => void;
+  antiCheat?: AntiCheatSettings;
+  onFinishExam: (
+    answers: Record<number, string>, 
+    timeSpentSeconds: number, 
+    reason: 'manual' | 'time' | 'violation',
+    violations?: CheatViolation[]
+  ) => void;
 }
 
 export const ExamScreen: React.FC<ExamScreenProps> = ({
   participant,
   questions,
   durationMinutes = EXAM_CONFIG.durationMinutes,
+  antiCheat,
   onFinishExam,
 }) => {
   const totalDurationSeconds = durationMinutes * 60;
+  
+  // Siapkan daftar soal (mendukung acak soal dan acak opsi jika diatur guru)
+  const [processedQuestions] = useState<Question[]>(() => 
+    prepareStudentQuestions(
+      questions, 
+      !!antiCheat?.randomizeQuestions, 
+      !!antiCheat?.randomizeOptions
+    )
+  );
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [doubts, setDoubts] = useState<Set<number>>(new Set());
@@ -31,29 +53,303 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Keep a reference to latest answers so auto-submit has up-to-date data without resetting timers
+  // Anti-Cheat states
+  const [violations, setViolations] = useState<CheatViolation[]>([]);
+  const [isAntiCheatWarningOpen, setIsAntiCheatWarningOpen] = useState(false);
+  const [isForceSubmitting, setIsForceSubmitting] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [antiCheatToast, setAntiCheatToast] = useState<string | null>(null);
+
   const answersRef = useRef(answers);
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
 
-  const isSubmittedRef = useRef(false);
+  const violationsRef = useRef(violations);
+  useEffect(() => {
+    violationsRef.current = violations;
+  }, [violations]);
 
-  // Automatic submission triggered when countdown timer reaches zero
+  const isSubmittedRef = useRef(false);
+  const lastBlurTimestampRef = useRef<number>(0);
+
+  const showToast = useCallback((msg: string) => {
+    setAntiCheatToast(msg);
+    setTimeout(() => {
+      setAntiCheatToast((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  }, []);
+
+  // Handler submit otomatis jika waktu habis
   const handleAutoSubmit = useCallback(() => {
     if (isSubmittedRef.current) return;
     isSubmittedRef.current = true;
     setIsSubmitted(true);
     setIsAutoSubmitting(true);
     setIsModalOpen(false);
+    setIsAntiCheatWarningOpen(false);
 
-    // Brief delay to allow student to see the auto-submission notice
     setTimeout(() => {
-      onFinishExam(answersRef.current, totalDurationSeconds, 'time');
+      onFinishExam(answersRef.current, totalDurationSeconds, 'time', violationsRef.current);
     }, 1200);
   }, [onFinishExam, totalDurationSeconds]);
 
-  const currentQuestion = questions[currentIndex];
+  // Handler force submit jika pelanggaran melebihi batas toleransi
+  const handleViolationForceSubmit = useCallback(() => {
+    if (isSubmittedRef.current) return;
+    isSubmittedRef.current = true;
+    setIsSubmitted(true);
+    setIsForceSubmitting(true);
+    setIsModalOpen(false);
+    setIsAntiCheatWarningOpen(false);
+
+    const timeSpent = Math.max(1, totalDurationSeconds - remainingSeconds);
+    onFinishExam(answersRef.current, timeSpent, 'violation', violationsRef.current);
+  }, [onFinishExam, remainingSeconds, totalDurationSeconds]);
+
+  // Record a violation safely
+  const recordViolation = useCallback((type: string, description: string) => {
+    if (isSubmittedRef.current) return;
+
+    const newViolation: CheatViolation = {
+      timestamp: getViolationTimestamp(),
+      type,
+      description,
+    };
+
+    setViolations((prev) => {
+      const updated = [...prev, newViolation];
+      violationsRef.current = updated;
+      const count = updated.length;
+      const max = antiCheat?.maxViolations ?? 3;
+
+      // Cek apakah mencapai batas maksimal toleransi
+      if (max > 0 && count >= max && antiCheat?.actionOnMaxViolations === 'auto_submit') {
+        setIsAntiCheatWarningOpen(true);
+        // Delay 1.5 detik agar siswa membaca sebelum dikumpulkan
+        setTimeout(() => {
+          handleViolationForceSubmit();
+        }, 2000);
+      } else {
+        setIsAntiCheatWarningOpen(true);
+      }
+
+      return updated;
+    });
+  }, [antiCheat?.maxViolations, antiCheat?.actionOnMaxViolations, handleViolationForceSubmit]);
+
+  // ==========================================
+  // ANTI-CHEAT LISTENERS: Tab Switching & Blur
+  // ==========================================
+  useEffect(() => {
+    if (!antiCheat?.enabled || !antiCheat?.blockTabSwitch) return;
+
+    const handleVisibilityChange = () => {
+      if (isSubmittedRef.current) return;
+
+      if (document.hidden) {
+        // Debounce agar tidak dobel dalam waktu 1.5 detik
+        const now = Date.now();
+        if (now - lastBlurTimestampRef.current > 1500) {
+          lastBlurTimestampRef.current = now;
+          recordViolation(
+            'Pindah Tab Browser',
+            'Peserta beralih ke tab atau program lain di luar lembar ujian CBT.'
+          );
+        }
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (isSubmittedRef.current) return;
+      const now = Date.now();
+      if (now - lastBlurTimestampRef.current > 2000) {
+        lastBlurTimestampRef.current = now;
+        recordViolation(
+          'Jendela Tidak Fokus (Blur)',
+          'Kursor atau jendela ujian kehilangan fokus (membuka aplikasi lain).'
+        );
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [antiCheat?.enabled, antiCheat?.blockTabSwitch, recordViolation]);
+
+  // ==========================================
+  // ANTI-CHEAT LISTENERS: Clipboard & Shortcuts
+  // ==========================================
+  useEffect(() => {
+    if (!antiCheat?.enabled) return;
+
+    const handleCopy = (e: ClipboardEvent) => {
+      if (antiCheat.disableCopyPaste) {
+        e.preventDefault();
+        showToast('Penyalinan teks soal dinonaktifkan demi integritas ujian.');
+        recordViolation('Mencoba Menyalin (Copy)', 'Peserta mencoba menyalin (copy) teks naskah soal.');
+      }
+    };
+
+    const handleCut = (e: ClipboardEvent) => {
+      if (antiCheat.disableCopyPaste) {
+        e.preventDefault();
+        showToast('Fungsi Cut dinonaktifkan.');
+      }
+    };
+
+    const handlePaste = (e: ClipboardEvent) => {
+      if (antiCheat.disableCopyPaste) {
+        e.preventDefault();
+        showToast('Fungsi Paste dinonaktifkan.');
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (antiCheat.disableRightClick) {
+        e.preventDefault();
+        showToast('Klik kanan dinonaktifkan selama ujian CBT berlangsung.');
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Shortcut blokir devtools & print/save
+      if (antiCheat.disableDevTools) {
+        // F12
+        if (e.key === 'F12') {
+          e.preventDefault();
+          showToast('Tombol F12 (Developer Tools) dinonaktifkan!');
+          recordViolation('Membuka Developer Tools (F12)', 'Peserta mencoba menekan tombol F12 Inspect Element.');
+          return;
+        }
+
+        // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+        if (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase())) {
+          e.preventDefault();
+          showToast('Inspect element dilarang!');
+          recordViolation('Membuka Developer Tools', 'Peserta mencoba shortcut Inspect Element.');
+          return;
+        }
+
+        // Ctrl+U (View Source)
+        if (e.ctrlKey && e.key.toUpperCase() === 'U') {
+          e.preventDefault();
+          showToast('Melihat source code dilarang.');
+          recordViolation('View Page Source (Ctrl+U)', 'Peserta mencoba melihat source code halaman.');
+          return;
+        }
+
+        // Ctrl+P (Print)
+        if (e.ctrlKey && e.key.toUpperCase() === 'P') {
+          e.preventDefault();
+          showToast('Mencetak naskah soal dilarang.');
+          return;
+        }
+
+        // Ctrl+S (Save Page)
+        if (e.ctrlKey && e.key.toUpperCase() === 'S') {
+          e.preventDefault();
+          return;
+        }
+      }
+
+      // Shortcut Copy/Paste jika disableCopyPaste
+      if (antiCheat.disableCopyPaste && e.ctrlKey && ['C', 'V', 'X'].includes(e.key.toUpperCase())) {
+        e.preventDefault();
+        showToast('Penyalinan naskah ujian dengan tombol pintas dilarang.');
+        recordViolation(`Pintasan Ctrl+${e.key.toUpperCase()}`, 'Peserta mencoba menyalin/menempel teks menggunakan keyboard.');
+      }
+    };
+
+    document.addEventListener('copy', handleCopy);
+    document.addEventListener('cut', handleCut);
+    document.addEventListener('paste', handlePaste);
+    document.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('copy', handleCopy);
+      document.removeEventListener('cut', handleCut);
+      document.removeEventListener('paste', handlePaste);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [antiCheat, recordViolation, showToast]);
+
+  // ==========================================
+  // FULLSCREEN MODE MANAGEMENT
+  // ==========================================
+  const toggleFullscreen = useCallback(() => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => {
+          setIsFullscreen(true);
+        }).catch(() => {
+          showToast('Perangkat/browser membatasi mode layar penuh.');
+        });
+      } else {
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+        }).catch(() => {});
+      }
+    } catch {
+      // fallback
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const inFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(inFullscreen);
+
+      if (!inFullscreen && antiCheat?.enabled && antiCheat?.enforceFullscreen && !isSubmittedRef.current) {
+        recordViolation(
+          'Keluar dari Layar Penuh',
+          'Peserta keluar dari mode tampilan layar penuh (Fullscreen) saat ujian aktif.'
+        );
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [antiCheat?.enabled, antiCheat?.enforceFullscreen, recordViolation]);
+
+  // Keyboard navigation for options (A-E, Left/Right, R for doubt)
+  useEffect(() => {
+    const handleNavigationKeys = (e: KeyboardEvent) => {
+      if (isModalOpen || isAntiCheatWarningOpen || isSubmittedRef.current) return;
+      // Jangan tangkap jika sedang menekan Ctrl/Alt
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      const currentQ = processedQuestions[currentIndex];
+      if (!currentQ) return;
+
+      const key = e.key.toUpperCase();
+      if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
+        setAnswers((prev) => ({ ...prev, [currentQ.id]: key }));
+      } else if (e.key === 'ArrowLeft') {
+        setCurrentIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        setCurrentIndex((prev) => Math.min(processedQuestions.length - 1, prev + 1));
+      } else if (key === 'R') {
+        setDoubts((prev) => {
+          const next = new Set(prev);
+          if (next.has(currentQ.id)) next.delete(currentQ.id);
+          else next.add(currentQ.id);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleNavigationKeys);
+    return () => window.removeEventListener('keydown', handleNavigationKeys);
+  }, [isModalOpen, isAntiCheatWarningOpen, processedQuestions, currentIndex]);
+
+  const currentQuestion = processedQuestions[currentIndex];
 
   const handleSelectOption = useCallback((key: string) => {
     if (!currentQuestion || isSubmittedRef.current) return;
@@ -81,33 +377,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   }, []);
 
   const handleNext = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1));
-  }, [questions.length]);
-
-  // Keyboard shortcut support
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if modal is open or submitted
-      if (isModalOpen || isSubmittedRef.current) return;
-
-      const key = e.key.toUpperCase();
-      if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
-        handleSelectOption(key);
-      } else if (e.key === 'ArrowLeft') {
-        handlePrev();
-      } else if (e.key === 'ArrowRight') {
-        handleNext();
-      } else if (key === 'R') {
-        handleToggleDoubt();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSelectOption, handlePrev, handleNext, handleToggleDoubt, isModalOpen]);
+    setCurrentIndex((prev) => Math.min(processedQuestions.length - 1, prev + 1));
+  }, [processedQuestions.length]);
 
   const answeredCount = Object.keys(answers).length;
-  const unansweredCount = questions.length - answeredCount;
+  const unansweredCount = processedQuestions.length - answeredCount;
   const doubtCount = doubts.size;
 
   const handleConfirmSubmit = () => {
@@ -116,11 +390,22 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsSubmitted(true);
     const timeSpent = Math.max(1, totalDurationSeconds - remainingSeconds);
     setIsModalOpen(false);
-    onFinishExam(answers, timeSpent, 'manual');
+    onFinishExam(answers, timeSpent, 'manual', violationsRef.current);
   };
 
   return (
-    <div id="exam-screen" className="min-h-screen bg-slate-100/70 pb-12">
+    <div 
+      id="exam-screen" 
+      className={`min-h-screen bg-slate-100/70 pb-12 ${antiCheat?.disableCopyPaste ? 'select-none' : ''}`}
+    >
+      {/* Toast Peringatan Anti-Curang Singkat */}
+      {antiCheatToast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs sm:text-sm font-bold border border-rose-500/50 animate-in fade-in slide-in-from-top-4 duration-200">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{antiCheatToast}</span>
+        </div>
+      )}
+
       {/* Sticky Header */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
@@ -139,15 +424,40 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             </div>
           </div>
 
-          {/* Status & Timer */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            <span
-              id="exam-status"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
+          {/* Anti-Cheat Badge & Controls */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {antiCheat?.enabled && (
+              <div 
+                title="Sistem Pengawas Ujian CBT Aktif"
+                className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                  violations.length > 0 
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse' 
+                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                {violations.length > 0 ? (
+                  <>
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                    <span>{violations.length} Pelanggaran</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Anti-Curang Aktif</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Toggle Fullscreen button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Layar Penuh'}
+              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors hidden sm:flex items-center gap-1 text-xs font-semibold cursor-pointer"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              UJIAN BERLANGSUNG
-            </span>
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
 
             {/* Dedicated Countdown Timer Component */}
             <CountdownTimer
@@ -176,7 +486,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         {isMobileNavOpen && (
           <div className="md:hidden mb-4 animate-in slide-in-from-top-2 duration-200">
             <QuestionNav
-              questions={questions}
+              questions={processedQuestions}
               currentIndex={currentIndex}
               answers={answers}
               doubts={doubts}
@@ -198,7 +508,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 selectedAnswer={answers[currentQuestion.id]}
                 isDoubt={doubts.has(currentQuestion.id)}
                 currentIndex={currentIndex}
-                totalQuestions={questions.length}
+                totalQuestions={processedQuestions.length}
                 textSize={textSize}
                 onChangeTextSize={setTextSize}
                 onSelectOption={handleSelectOption}
@@ -213,7 +523,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           {/* Question Navigation Grid (Right / Desktop) */}
           <div className="hidden md:block md:col-span-4 lg:col-span-3">
             <QuestionNav
-              questions={questions}
+              questions={processedQuestions}
               currentIndex={currentIndex}
               answers={answers}
               doubts={doubts}
@@ -231,7 +541,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         answeredCount={answeredCount}
         unansweredCount={unansweredCount}
         doubtCount={doubtCount}
-        totalCount={questions.length}
+        totalCount={processedQuestions.length}
+      />
+
+      {/* Anti-Cheat Warning Modal */}
+      <AntiCheatWarningModal
+        isOpen={isAntiCheatWarningOpen}
+        onClose={() => setIsAntiCheatWarningOpen(false)}
+        violations={violations}
+        maxViolations={antiCheat?.maxViolations ?? 3}
+        isForceSubmitting={isForceSubmitting}
+        onForceSubmitNow={handleViolationForceSubmit}
       />
 
       {/* Automatic Submission Modal upon Time Expiry */}
