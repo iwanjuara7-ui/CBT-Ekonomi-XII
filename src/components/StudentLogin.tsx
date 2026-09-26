@@ -5,7 +5,7 @@ import {
   BookOpen, GraduationCap, ShieldCheck, User, Users, Sparkles, 
   Lock, KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2 
 } from 'lucide-react';
-import { verifyTeacherLogin, getTeacherCredentials, DEFAULT_TEACHER_CREDENTIALS } from '../utils/authService';
+import { verifyTeacherLogin } from '../utils/authService';
 
 interface StudentLoginProps {
   submissions?: SubmissionRecord[];
@@ -92,13 +92,6 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({
     } else {
       setAdminError('Username atau password salah! Akses ke Dashboard Guru dilindungi.');
     }
-  };
-
-  const handleFillDefaultAdmin = () => {
-    const creds = getTeacherCredentials();
-    setAdminUsername(creds.username);
-    setAdminPassword(creds.password);
-    setAdminError('');
   };
 
   return (
@@ -419,22 +412,6 @@ export const StudentLogin: React.FC<StudentLoginProps> = ({
                 <KeyRound className="w-4 h-4" />
                 <span>Masuk ke Dashboard Guru</span>
               </button>
-
-              {/* Default Credentials Helper Card */}
-              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <span className="font-semibold">Akun Bawaan:</span>
-                  <code className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-mono font-bold">endang8</code>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFillDefaultAdmin}
-                  className="text-xs text-blue-700 hover:text-blue-900 font-semibold hover:underline flex items-center gap-1 self-start sm:self-auto cursor-pointer"
-                  title="Isi otomatis username dan password bawaan"
-                >
-                  <span>Gunakan Akun Bawaan</span>
-                </button>
-              </div>
             </form>
           )}
         </div>
